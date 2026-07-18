@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waypoint — live party tracking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.7.3/maplibre-gl.min.css" />
+<style>
+  :root{
+    --map-ink:#0E1417; --paper:#121719; --paper-2:#1B2225;
+    --ink:#EDEAE3; --ink-soft:#8C9491;
+    --amber:#E2A54B; --amber-dark:#3B2A0F;
+    --coral:#E2735C; --coral-dark:#F3B3A4;
+    --sage:#7FA98B; --sage-dark:#A9D3B8;
+    --route-blue:#2F8FFF;
+    --line:rgba(237,234,227,0.12);
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:'Inter',sans-serif; background:#05070A; display:flex; justify-content:center; padding:32px 16px; color:var(--ink); }
+  .device{ width:380px; max-width:100%; background:var(--paper); border-radius:28px; border:1px solid var(--line); overflow:hidden; min-height:720px; height:720px; display:flex; flex-direction:column; position:relative; }
+  .brandbar{ display:flex; align-items:center; gap:8px; padding:18px 20px 6px; flex-shrink:0; }
+  .brandbar .mark{ width:22px;height:22px; border-radius:50%; background:var(--amber); position:relative; flex-shrink:0; }
+  .brandbar .mark::after{ content:""; position:absolute; inset:6px; border-radius:50%; background:var(--map-ink); }
+  .brandbar span{ font-family:'Space Grotesk',sans-serif; font-weight:700; letter-spacing:0.02em; font-size:15px; }
+  .status-dot{ margin-left:auto; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-soft); font-weight:600; }
+  .status-dot i{ width:7px; height:7px; border-radius:50%; background:var(--coral); display:inline-block; }
+  .status-dot.on i{ background:var(--sage); }
+
+  .screen{ flex:1; display:flex; flex-direction:column; min-height:0; }
+  .hidden{ display:none !important; }
+  button{ font-family:inherit; cursor:pointer; }
+
+  .home{ padding:24px 24px 32px; overflow-y:auto; }
+  .home h1{ font-family:'Space Grotesk',sans-serif; font-size:28px; line-height:1.15; font-weight:700; margin:16px 0 10px; }
+  .home p.sub{ color:var(--ink-soft); font-size:14px; line-height:1.5; margin:0; max-width:290px; }
+  label.field-label{ font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-soft); margin:18px 0 6px; display:block; }
+  input.textfield{ width:100%; padding:13px 14px; border-radius:12px; border:1.5px solid var(--line); background:var(--paper-2); font-size:14.5px; color:var(--ink); }
+  input.textfield:focus{ outline:none; border-color:var(--amber); }
+  .home-actions{ margin-top:20px; display:flex; flex-direction:column; gap:10px; }
+  .btn-primary{ background:var(--amber); color:var(--map-ink); border:none; border-radius:12px; padding:15px 18px; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:space-between; }
+  .btn-primary:active{ transform:scale(0.98); }
+  .btn-secondary{ background:transparent; color:var(--ink); border:1.5px solid var(--line); border-radius:12px; padding:14px 18px; font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:space-between; }
+  .join-row{ display:flex; gap:8px; margin-top:4px; }
+  .join-row input{ flex:1; font-family:'JetBrains Mono',monospace; font-size:16px; letter-spacing:0.12em; text-transform:uppercase; padding:14px; border-radius:12px; border:1.5px solid var(--line); background:var(--paper-2); color:var(--ink); }
+  .join-row input:focus{ outline:none; border-color:var(--amber); }
+  .hint{ font-size:12px; color:var(--coral-dark); margin-top:8px; min-height:14px; }
+  .mini-map-wrap{ margin-top:18px; border-radius:14px; overflow:hidden; position:relative; height:130px; background:var(--map-ink); border:1px solid var(--line); }
+  #home-map{ height:100%; width:100%; }
+  .mini-map-label{ position:absolute; bottom:8px; left:10px; font-size:10.5px; font-weight:700; color:#fff; background:rgba(0,0,0,0.55); padding:3px 9px; border-radius:8px; letter-spacing:0.02em; z-index:5; }
+  .mini-map-label.err{ background:rgba(226,115,92,0.85); }
+
+  .code-screen{ padding:24px 24px 32px; overflow-y:auto; }
+  .code-screen h2{ font-family:'Space Grotesk',sans-serif; font-size:20px; margin:16px 0 4px; }
+  .code-screen p{ color:var(--ink-soft); font-size:14px; margin:0 0 20px; }
+  .ticket{ background:var(--map-ink); color:var(--paper); border-radius:16px; padding:22px 20px; }
+  .ticket .label{ font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--amber); font-weight:700; }
+  .ticket .code{ font-family:'JetBrains Mono',monospace; font-size:38px; font-weight:700; letter-spacing:0.1em; margin:8px 0 4px; }
+  .ticket .perf{ display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:14px; border-top:1.5px dashed rgba(244,238,225,0.3); font-size:12.5px; color:rgba(244,238,225,0.7); }
+  .code-actions{ margin-top:20px; display:flex; flex-direction:column; gap:10px; }
+  .copy-note{ text-align:center; font-size:12.5px; color:var(--sage-dark); font-weight:600; height:16px; margin-top:6px; }
+  .backrow{ display:flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:13px; font-weight:600; cursor:pointer; width:fit-content; }
+
+  .page-header{ display:flex; align-items:center; gap:12px; padding:16px 18px; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .page-header .backbtn{ background:none; border:none; color:var(--ink-soft); font-size:13.5px; font-weight:700; cursor:pointer; padding:4px 2px; display:flex; align-items:center; gap:4px; }
+  .page-header b{ font-family:'Space Grotesk',sans-serif; font-size:15px; }
+
+  .party-header{ padding:16px 18px 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .party-header .pname{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; }
+  .party-header .pcode{ font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-soft); }
+  .chip{ background:var(--paper-2); border:1px solid var(--line); border-radius:20px; padding:6px 12px; font-size:12.5px; font-weight:600; }
+  .map-wrap{ position:relative; flex:1; min-height:0; background:var(--map-ink); }
+  .fullmap{ position:absolute; inset:0; }
+  .gps-banner{ padding:9px 16px; font-size:12px; background:var(--paper-2); color:var(--ink-soft); text-align:center; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .gps-banner.error{ color:var(--coral-dark); background:#3a1f1a; }
+
+  .map-fab{ position:absolute; bottom:14px; right:14px; z-index:800; width:40px; height:40px; border-radius:50%; background:var(--paper); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:17px; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+
+  .member-strip{ display:flex; gap:12px; padding:14px 16px; overflow-x:auto; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--paper); flex-shrink:0; }
+  .member{ display:flex; flex-direction:column; align-items:center; gap:5px; min-width:52px; flex-shrink:0; }
+  .avatar-wrap{ position:relative; }
+  .avatar{ width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700; font-family:'Space Grotesk',sans-serif; }
+  .crown{ position:absolute; top:-11px; left:50%; transform:translateX(-50%); font-size:13px; }
+  .kick-btn{ position:absolute; top:-5px; right:-5px; width:16px; height:16px; border-radius:50%; background:var(--coral); color:#fff; border:none; font-size:9px; display:flex; align-items:center; justify-content:center; padding:0; }
+  .member .mname{ font-size:10.5px; color:var(--ink-soft); font-weight:600; }
+  .member .mstatus{ font-size:9.5px; color:var(--sage-dark); font-weight:700; white-space:nowrap; }
+  .member.track-pick{ cursor:pointer; opacity:0.55; }
+  .member.track-pick.active{ opacity:1; }
+  .member.track-pick.active .avatar{ box-shadow:0 0 0 2px var(--amber); }
+
+  .party-footer{ display:flex; gap:6px; padding:12px 12px 16px; flex-shrink:0; }
+  .footer-btn{ flex:1; border-radius:12px; padding:11px 2px; font-size:10.5px; font-weight:700; border:1.5px solid var(--line); background:#fff; color:var(--map-ink); display:flex; align-items:center; justify-content:center; gap:4px; position:relative; }
+  .footer-btn.leave{ color:var(--coral-dark); border-color:rgba(226,115,92,0.4); }
+  .footer-btn.nav{ color:var(--sage-dark); }
+  .footer-btn.track{ color:#2E5A78; }
+  .footer-btn.chat{ background:var(--amber); color:var(--map-ink); border:none; }
+  .badge{ position:absolute; top:-6px; right:2px; background:var(--coral); color:#fff; font-size:10px; font-weight:700; width:17px; height:17px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+
+  .chat-log{ flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+  .msg{ max-width:78%; }
+  .msg .who{ font-size:10.5px; font-weight:700; margin-bottom:2px; color:var(--ink-soft); }
+  .msg .bubble{ padding:9px 12px; border-radius:14px; font-size:13.5px; line-height:1.4; background:var(--paper-2); }
+  .msg.me{ align-self:flex-end; }
+  .msg.me .bubble{ background:var(--map-ink); color:var(--ink); border:1px solid var(--line); }
+  .msg.me .who{ text-align:right; }
+  .msg.system{ align-self:center; max-width:90%; }
+  .msg.system .bubble{ background:none; color:var(--ink-soft); font-style:italic; font-size:11.5px; text-align:center; padding:4px; }
+  .chat-input-row{ display:flex; gap:8px; padding:12px 14px 16px; border-top:1px solid var(--line); flex-shrink:0; }
+  .chat-input-row input{ flex:1; border-radius:20px; border:1.5px solid var(--line); padding:10px 14px; font-size:13.5px; background:var(--paper-2); color:var(--ink); }
+  .chat-input-row input:focus{ outline:none; border-color:var(--amber); }
+  .sendbtn{ width:38px; height:38px; border-radius:50%; border:none; background:var(--amber); color:var(--amber-dark); font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+  .nav-search-bar{ padding:12px 16px; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .nav-results{ position:absolute; top:0; left:0; right:0; max-height:75%; overflow-y:auto; background:var(--paper); z-index:1000; border-bottom:1px solid var(--line); box-shadow:0 8px 20px rgba(0,0,0,0.4); }
+  .nav-result{ padding:12px 16px; border-bottom:1px solid var(--line); cursor:pointer; font-size:13px; line-height:1.4; }
+  .nav-result:active{ background:var(--paper-2); }
+  .nav-hint{ padding:14px 16px; font-size:12.5px; color:var(--ink-soft); }
+  .nav-hint.err{ color:var(--coral-dark); }
+
+  .dest-chip{ position:absolute; top:10px; left:10px; right:10px; z-index:900; background:rgba(14,20,23,0.92); color:#fff; padding:10px 12px; border-radius:12px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; border:1px solid rgba(255,255,255,0.12); }
+  .dest-chip .dc-name{ font-weight:700; font-size:13px; }
+  .dest-chip .dc-meta{ font-size:11.5px; color:#C7CDCB; margin-top:2px; }
+  .dest-chip .dc-right{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  .dest-chip .closebtn{ background:none;border:none;color:#fff;font-size:15px; padding:0; }
+  .starttrip-btn{ background:var(--route-blue); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:11px; font-weight:700; white-space:nowrap; }
+
+  .share-toggle{ position:absolute; top:72px; left:10px; right:10px; z-index:900; display:flex; gap:6px; }
+  .stbtn{ flex:1; padding:7px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:rgba(14,20,23,0.85); color:#fff; font-size:11px; font-weight:700; }
+  .stbtn.active{ background:var(--amber); color:var(--map-ink); border-color:var(--amber); }
+
+  .trip-banner{ position:absolute; top:10px; left:10px; right:10px; z-index:950; background:var(--map-ink); border:1px solid var(--line); border-radius:14px; padding:12px 14px; display:flex; align-items:center; gap:12px; box-shadow:0 8px 22px rgba(0,0,0,0.5); }
+  .trip-banner .arrow{ font-size:26px; width:36px; text-align:center; }
+  .trip-banner .txt{ flex:1; }
+  .trip-banner .txt .tt{ font-size:14px; font-weight:700; color:#fff; }
+  .trip-banner .txt .td{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+  .end-trip-btn{ background:var(--coral); color:#fff; border:none; border-radius:8px; padding:8px 10px; font-size:11px; font-weight:700; }
+
+  .track-picker{ padding:14px 16px 10px; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .track-picker .ttl{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin-bottom:10px; }
+  .track-list{ display:flex; gap:10px; overflow-x:auto; }
+
+  .pin-icon{ display:flex; flex-direction:column; align-items:center; }
+  .pin-icon .dot{ width:16px; height:16px; border-radius:50%; border:2.5px solid #fff; box-shadow:0 0 0 2px rgba(0,0,0,0.25); }
+  .pin-icon .lbl{ margin-top:3px; font-size:10px; font-weight:700; color:#fff; background:rgba(22,35,43,0.85); padding:2px 6px; border-radius:6px; white-space:nowrap; }
+  .pin-icon .arrow-ind{ font-size:14px; margin-top:-2px; }
+  .maplibregl-ctrl-attrib{ font-size:9px !important; }
+</style>
+</head>
+<body>
+
+<div class="device">
+  <div class="brandbar"><div class="mark"></div><span>WAYPOINT</span><div class="status-dot" id="conn-status"><i></i><span>offline</span></div></div>
+
+  <!-- HOME -->
+  <div class="screen home" id="screen-home">
+    <h1>Know where<br>your people are.</h1>
+    <p class="sub">Start a party and share the code, or join one someone sent you. Real GPS, synced live while the app is open.</p>
+    <label class="field-label">Your name</label>
+    <input class="textfield" id="name-input" placeholder="e.g. Sam" maxlength="20">
+    <div class="mini-map-wrap">
+      <div id="home-map"></div>
+      <div class="mini-map-label" id="home-map-label">Finding your location…</div>
+    </div>
+    <div class="home-actions">
+      <button class="btn-primary" id="create-btn" onclick="createParty()">Start a party <span>&#8594;</span></button>
+      <div class="join-row">
+        <input id="join-code-input" maxlength="6" placeholder="ENTER CODE">
+        <button class="btn-secondary" style="width:auto;" onclick="joinParty()">Join</button>
+      </div>
+    </div>
+    <div class="hint" id="home-hint"></div>
+  </div>
+
+  <!-- CODE -->
+  <div class="screen code-screen hidden" id="screen-code">
+    <div class="backrow" onclick="goHome()">&#8592; back</div>
+    <h2>Your party is live</h2>
+    <p>Share this code with the people you want in your party.</p>
+    <div class="ticket">
+      <div class="label">Party code</div>
+      <div class="code" id="party-code-display">------</div>
+      <div class="perf"><span id="party-name-display">Waypoint party</span><span>Firebase synced</span></div>
+    </div>
+    <div class="copy-note" id="copy-note"></div>
+    <div class="code-actions">
+      <button class="btn-secondary" onclick="copyCode()">Copy code</button>
+      <button class="btn-primary" onclick="enterPartyView()">Enter party <span>&#8594;</span></button>
+    </div>
+  </div>
+
+  <!-- PARTY -->
+  <div class="screen hidden" id="screen-party">
+    <div class="party-header">
+      <div>
+        <div class="pname" id="party-title">Waypoint party</div>
+        <div class="pcode" id="party-subcode">Code · ------</div>
+      </div>
+      <div class="chip" id="member-count-chip">1 in party</div>
+    </div>
+    <div class="gps-banner" id="gps-banner">Requesting location access…</div>
+    <div class="map-wrap">
+      <div id="party-map" class="fullmap"></div>
+      <button class="map-fab" onclick="recenterPartyMap()">&#8982;</button>
+    </div>
+    <div class="member-strip" id="member-strip"></div>
+    <div class="party-footer">
+      <button class="footer-btn leave" onclick="leaveParty(false)">Leave</button>
+      <button class="footer-btn nav" onclick="openNav()">Navigate</button>
+      <button class="footer-btn chat" onclick="openChat()">Chat <span class="badge hidden" id="chat-badge">0</span></button>
+      <button class="footer-btn track" onclick="openTrack()">Track</button>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div class="screen hidden" id="screen-chat">
+    <div class="page-header"><button class="backbtn" onclick="backToParty()">&#8592; Back</button><b>Party chat</b></div>
+    <div class="chat-log" id="chat-log"></div>
+    <div class="chat-input-row">
+      <input id="chat-input" placeholder="Message the party" onkeydown="if(event.key==='Enter')sendMessage()">
+      <button class="sendbtn" onclick="sendMessage()">&#8593;</button>
+    </div>
+  </div>
+
+  <!-- NAVIGATION -->
+  <div class="screen hidden" id="screen-nav">
+    <div class="page-header"><button class="backbtn" onclick="backToParty()">&#8592; Back</button><b>Navigate</b></div>
+    <div class="nav-search-bar" id="nav-search-bar-wrap">
+      <input class="textfield" id="nav-search-input" placeholder="Search a place" oninput="onNavSearchInput()">
+    </div>
+    <div class="map-wrap">
+      <div id="nav-map" class="fullmap"></div>
+      <div class="nav-results hidden" id="nav-results"></div>
+      <div class="dest-chip hidden" id="dest-chip">
+        <div>
+          <div class="dc-name" id="dc-name"></div>
+          <div class="dc-meta" id="dc-meta"></div>
+        </div>
+        <div class="dc-right">
+          <button class="closebtn" onclick="clearDestination()">&#10005;</button>
+          <button class="starttrip-btn hidden" id="start-trip-btn" onclick="startTrip()">Start trip</button>
+        </div>
+      </div>
+      <div class="share-toggle hidden" id="share-toggle">
+        <button class="stbtn active" id="share-me-btn" onclick="setShareMode(false)">Only me</button>
+        <button class="stbtn" id="share-all-btn" onclick="setShareMode(true)">Whole party</button>
+      </div>
+      <div class="trip-banner hidden" id="trip-banner">
+        <div class="arrow" id="trip-arrow">&#11014;&#65039;</div>
+        <div class="txt"><div class="tt" id="trip-text">Head straight</div><div class="td" id="trip-dist">—</div></div>
+        <button class="end-trip-btn" onclick="endTrip()">End</button>
+      </div>
+      <button class="map-fab" onclick="recenterNavMap()">&#8982;</button>
+    </div>
+  </div>
+
+  <!-- TRACK MEMBER -->
+  <div class="screen hidden" id="screen-track">
+    <div class="page-header"><button class="backbtn" onclick="backToParty()">&#8592; Back</button><b>Track a member</b></div>
+    <div class="track-picker">
+      <div class="ttl">Who do you want to track?</div>
+      <div class="track-list" id="track-member-list"></div>
+    </div>
+    <div class="map-wrap">
+      <div id="track-map" class="fullmap"></div>
+      <div class="dest-chip hidden" id="track-chip">
+        <div>
+          <div class="dc-name" id="track-dc-name"></div>
+          <div class="dc-meta" id="track-dc-meta"></div>
+        </div>
+      </div>
+      <button class="map-fab" onclick="recenterTrackMap()">&#8982;</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.7.3/maplibre-gl.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/12.15.0/firebase-app-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/12.15.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAkMns4pQogfCdTkbogSS-YUTn_qq68DzI",
+  authDomain: "waypointy-a430b.firebaseapp.com",
+  databaseURL: "https://waypointy-a430b-default-rtdb.firebaseio.com",
+  projectId: "waypointy-a430b",
+  storageBucket: "waypointy-a430b.firebasestorage.app",
+  messagingSenderId: "7542392063",
+  appId: "1:7542392063:web:eb15e32acfedc9117378ca"
+};
+
+let db=null, firebaseReady=false;
+try{ firebase.initializeApp(firebaseConfig); db=firebase.database(); firebaseReady = firebaseConfig.apiKey !== "PASTE_YOUR_API_KEY"; }catch(e){ firebaseReady=false; }
+
+const COLORS=['#E2A54B','#E2735C','#7FA98B','#3378D8','#B060C0','#4AAFA0'];
+const MAP_STYLE='https://tiles.openfreemap.org/styles/liberty';
+
+let myName='', myId='u'+Math.random().toString(36).slice(2,10), myColor=COLORS[Math.floor(Math.random()*COLORS.length)];
+let partyCode='', currentScreen='screen-home';
+let homeMap=null, homeMarkerEntry=null, homeWatchId=null, homeMapReady=false;
+let partyMap=null, partyMarkers={}, partyMapReady=false, partyCenteredOnce=false;
+let watchId=null, myLat=null, myLng=null, lastFixTime=null, lastFixLat=null, lastFixLng=null, currentHeading=null;
+let unread=0;
+let membersRef=null, chatRef=null, myMemberRef=null, destRef=null, leaderRef=null;
+let partyMembers={}, partyLeaderUid=null, joinedFirebase=false, leavingIntentionally=false;
+let liveRecalcInterval=null;
+
+let navMap=null, navMapReady=false, navCenteredOnce=false;
+let navDestMarkerEntry=null, navMeMarkerEntry=null, navSearchTimer=null;
+let partyDestination=null, lastNavRouteCalc=0, hasAnnouncedArrival=false;
+let routeSteps=[], currentStepIndex=0, tripActive=false;
+
+let trackMap=null, trackMapReady=false, trackCenteredOnce=false;
+let trackTargetUid=null, trackMemberMarkerEntry=null, trackMeMarkerEntry=null, lastTrackRouteCalc=0;
+
+let partyMapDestMarkerEntry=null, lastPartyMapRouteCalc=0;
+
+function setConn(on){
+  const el=document.getElementById('conn-status');
+  el.classList.toggle('on', on);
+  el.querySelector('span').textContent = on ? 'live' : (firebaseReady ? 'offline' : 'not configured');
+}
+setConn(false);
+
+function screen(id){
+  document.querySelectorAll('.screen').forEach(el=>el.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  currentScreen=id;
+}
+function randCode(){ const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
+
+function haversine(lat1,lng1,lat2,lng2){
+  const R=6371000, tr=d=>d*Math.PI/180;
+  const dLat=tr(lat2-lat1), dLng=tr(lng2-lng1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(tr(lat1))*Math.cos(tr(lat2))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function bearingBetween(lat1,lng1,lat2,lng2){
+  const tr=d=>d*Math.PI/180, td=r=>r*180/Math.PI;
+  const dLng=tr(lng2-lng1);
+  const y=Math.sin(dLng)*Math.cos(tr(lat2));
+  const x=Math.cos(tr(lat1))*Math.sin(tr(lat2)) - Math.sin(tr(lat1))*Math.cos(tr(lat2))*Math.cos(dLng);
+  return (td(Math.atan2(y,x))+360)%360;
+}
+function fmtDist(m){ return m<1000 ? Math.round(m)+' m' : (m/1000).toFixed(1)+' km'; }
+function fmtDur(s){ const mins=Math.round(s/60); return mins<60 ? mins+' min' : Math.floor(mins/60)+'h '+(mins%60)+'m'; }
+
+function makePinEl(color,label,extraHtml){
+  const el=document.createElement('div');
+  el.className='pin-icon';
+  el.innerHTML=`<div class="dot" style="background:${color}"></div>${extraHtml||''}<div class="lbl">${label}</div>`;
+  return el;
+}
+function makePinMarker(map,lat,lng,color,label,extraHtml){
+  const el=makePinEl(color,label,extraHtml);
+  const marker=new maplibregl.Marker({element:el, anchor:'bottom'}).setLngLat([lng,lat]).addTo(map);
+  return {marker, el};
+}
+function setRouteLine(map, srcId, layerId, coordsLngLat, color){
+  const geojson={type:'Feature', geometry:{type:'LineString', coordinates:coordsLngLat}};
+  if(map.getSource(srcId)){
+    map.getSource(srcId).setData(geojson);
+    if(map.getLayer(layerId)) map.setPaintProperty(layerId,'line-color',color);
+  }else{
+    map.addSource(srcId,{type:'geojson', data:geojson});
+    map.addLayer({id:layerId, type:'line', source:srcId, layout:{'line-join':'round','line-cap':'round'}, paint:{'line-color':color,'line-width':5,'line-opacity':0.92}});
+  }
+}
+function removeRouteLine(map, srcId, layerId){
+  if(!map) return;
+  if(map.getLayer && map.getLayer(layerId)) map.removeLayer(layerId);
+  if(map.getSource && map.getSource(srcId)) map.removeSource(srcId);
+}
+function boundsFromCoords(coordsLngLat){
+  const b=new maplibregl.LngLatBounds();
+  coordsLngLat.forEach(c=>b.extend(c));
+  return b;
+}
+
+/* ================= HOME ================= */
+function initHomeMap(){
+  homeMap=new maplibregl.Map({ container:'home-map', style:MAP_STYLE, center:[0,20], zoom:1.5, interactive:false, attributionControl:false });
+  homeMap.on('load', ()=>{ homeMapReady=true; });
+}
+function startHomeWatch(){
+  if(homeWatchId!=null || !navigator.geolocation) return;
+  const label=document.getElementById('home-map-label');
+  homeWatchId=navigator.geolocation.watchPosition(pos=>{
+    const lat=pos.coords.latitude, lng=pos.coords.longitude;
+    label.textContent='Your live location'; label.classList.remove('err');
+    if(!homeMapReady) return;
+    if(!homeMarkerEntry) homeMarkerEntry=makePinMarker(homeMap,lat,lng,myColor,'');
+    else homeMarkerEntry.marker.setLngLat([lng,lat]);
+    homeMap.easeTo({center:[lng,lat], zoom:15, duration:500});
+  }, err=>{ label.textContent='Location unavailable — check permissions'; label.classList.add('err'); },
+  { enableHighAccuracy:true, maximumAge:5000, timeout:10000 });
+}
+function stopHomeWatch(){ if(homeWatchId!=null){ navigator.geolocation.clearWatch(homeWatchId); homeWatchId=null; } }
+window.addEventListener('load', ()=>{ initHomeMap(); startHomeWatch(); });
+
+function requireName(){
+  myName=document.getElementById('name-input').value.trim();
+  const hint=document.getElementById('home-hint');
+  if(!myName){ hint.textContent='Enter your name first.'; return false; }
+  if(!firebaseReady){ hint.textContent='Firebase config not set yet.'; return false; }
+  hint.textContent=''; return true;
+}
+function createParty(){
+  if(!requireName()) return;
+  stopHomeWatch();
+  partyCode=randCode();
+  document.getElementById('party-code-display').textContent=partyCode;
+  document.getElementById('copy-note').textContent='';
+  db.ref('parties/'+partyCode).update({ createdAt:Date.now(), leaderUid:myId });
+  screen('screen-code');
+}
+function joinParty(){
+  if(!requireName()) return;
+  stopHomeWatch();
+  const input=document.getElementById('join-code-input');
+  const val=input.value.trim().toUpperCase();
+  if(!val){ input.focus(); return; }
+  partyCode=val;
+  document.getElementById('party-title').textContent='Waypoint party';
+  document.getElementById('party-subcode').textContent='Code · '+partyCode;
+  enterPartyView();
+}
+function copyCode(){
+  navigator.clipboard.writeText(partyCode).catch(()=>{});
+  document.getElementById('copy-note').textContent='Code copied';
+  setTimeout(()=>document.getElementById('copy-note').textContent='',1500);
+}
+function goHome(){ screen('screen-home'); startHomeWatch(); }
+
+/* ================= PARTY ================= */
+function enterPartyView(){
+  document.getElementById('party-title').textContent='Waypoint party';
+  document.getElementById('party-subcode').textContent='Code · '+partyCode;
+  screen('screen-party');
+
+  if(!partyMap){
+    partyMap=new maplibregl.Map({ container:'party-map', style:MAP_STYLE, center:[0,20], zoom:1.5 });
+    partyMap.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
+    partyMap.on('load', ()=>{ partyMapReady=true; });
+  }
+
+  membersRef=db.ref('parties/'+partyCode+'/members');
+  chatRef=db.ref('parties/'+partyCode+'/chat');
+  destRef=db.ref('parties/'+partyCode+'/destination');
+  leaderRef=db.ref('parties/'+partyCode+'/leaderUid');
+  myMemberRef=membersRef.child(myId);
+  myMemberRef.onDisconnect().remove();
+  leavingIntentionally=false;
+  joinedFirebase=true;
+  myMemberRef.on('value', snap=>{
+    if(joinedFirebase && !snap.exists() && !leavingIntentionally){
+      alert('You were removed from the party.');
+      leaveParty(true);
+    }
+  });
+
+  leaderRef.on('value', snap=>{
+    partyLeaderUid=snap.val();
+    renderMemberStrip(partyMembers);
+    if(currentScreen==='screen-track') renderTrackMemberList();
+  });
+
+  membersRef.on('value', snap=>{
+    partyMembers=snap.val()||{};
+    renderPartyMap(partyMembers);
+    renderMemberStrip(partyMembers);
+    document.getElementById('member-count-chip').textContent=Object.keys(partyMembers).length+' in party';
+    if(trackTargetUid && !partyMembers[trackTargetUid]){ trackTargetUid=null; clearTrackVisuals(); }
+    if(currentScreen==='screen-track') renderTrackMemberList();
+    if(currentScreen==='screen-track' && trackTargetUid && Date.now()-lastTrackRouteCalc>8000) updateTrackRoute();
+  });
+
+  document.getElementById('chat-log').innerHTML=''; unread=0; updateChatBadge();
+  chatRef.limitToLast(50).on('child_added', snap=>{
+    const m=snap.val();
+    addMessageToLog(m.name, m.text, m.uid===myId, !!m.system);
+  });
+
+  destRef.on('value', snap=>{
+    partyDestination=snap.val();
+    lastNavRouteCalc=0; hasAnnouncedArrival=false;
+    if(currentScreen==='screen-nav') renderNavDestination();
+  });
+
+  startGPS();
+  setConn(true);
+  liveRecalcInterval=setInterval(()=>{
+    if(currentScreen==='screen-nav' && partyDestination) updateNavRoute();
+    if(currentScreen==='screen-track' && trackTargetUid) updateTrackRoute();
+    refreshPartyMapDestination();
+  }, 15000);
+}
+
+function startGPS(){
+  const banner=document.getElementById('gps-banner');
+  if(!navigator.geolocation){ banner.textContent="Your browser doesn't support location."; banner.classList.add('error'); return; }
+  banner.textContent='Requesting location access…'; banner.classList.remove('error');
+  watchId=navigator.geolocation.watchPosition(pos=>{
+    const prevLat=myLat, prevLng=myLng, prevT=lastFixTime;
+    myLat=pos.coords.latitude; myLng=pos.coords.longitude;
+    const now=Date.now();
+    let speedKmh=null, heading=pos.coords.heading;
+    if(pos.coords.speed!=null && !isNaN(pos.coords.speed)) speedKmh=Math.round(pos.coords.speed*3.6);
+    else if(prevLat!=null && prevT!=null){
+      const dt=(now-prevT)/1000;
+      if(dt>0.5) speedKmh=Math.round((haversine(prevLat,prevLng,myLat,myLng)/dt)*3.6);
+    }
+    if((heading==null||isNaN(heading)) && prevLat!=null) heading=bearingBetween(prevLat,prevLng,myLat,myLng);
+    currentHeading = heading;
+    lastFixTime=now; lastFixLat=myLat; lastFixLng=myLng;
+    const moving = speedKmh!=null && speedKmh>2;
+
+    banner.textContent='Sharing your live location'; banner.classList.remove('error');
+    myMemberRef.set({ name:myName, uid:myId, color:myColor, lat:myLat, lng:myLng, updatedAt:now, speed:speedKmh, heading:heading, moving:moving });
+
+    if(currentScreen==='screen-nav' && partyDestination && Date.now()-lastNavRouteCalc>12000) updateNavRoute();
+    if(currentScreen==='screen-track' && trackTargetUid && Date.now()-lastTrackRouteCalc>12000) updateTrackRoute();
+    if(Date.now()-lastPartyMapRouteCalc>15000) refreshPartyMapDestination();
+    if(tripActive){
+      navMap.easeTo({center:[myLng,myLat], bearing: heading||0, duration:900});
+      updateTripBanner();
+    }
+  }, err=>{ banner.textContent='Location access denied — enable it in browser settings to share your position.'; banner.classList.add('error'); },
+  { enableHighAccuracy:true, maximumAge:5000, timeout:10000 });
+}
+
+function renderPartyMap(data){
+  if(!partyMapReady) return;
+  const seen=new Set(); const pts=[];
+  Object.entries(data).forEach(([uid,m])=>{
+    if(m.lat==null) return;
+    seen.add(uid); pts.push([m.lng,m.lat]);
+    const isMe=uid===myId;
+    const label=(isMe?'You':m.name);
+    if(!partyMarkers[uid]) partyMarkers[uid]=makePinMarker(partyMap,m.lat,m.lng,m.color||'#888',label);
+    else{ partyMarkers[uid].marker.setLngLat([m.lng,m.lat]); partyMarkers[uid].el.querySelector('.lbl').textContent=label; }
+  });
+  Object.keys(partyMarkers).forEach(uid=>{ if(!seen.has(uid)){ partyMarkers[uid].marker.remove(); delete partyMarkers[uid]; } });
+  if(!partyCenteredOnce && pts.length){
+    partyCenteredOnce=true;
+    if(pts.length===1) partyMap.easeTo({center:pts[0], zoom:15, duration:500});
+    else partyMap.fitBounds(boundsFromCoords(pts), {padding:60, duration:500});
+  }
+}
+function recenterPartyMap(){
+  const pts=Object.values(partyMembers).filter(m=>m.lat!=null).map(m=>[m.lng,m.lat]);
+  if(!pts.length) return;
+  if(pts.length===1) partyMap.easeTo({center:pts[0], zoom:15});
+  else partyMap.fitBounds(boundsFromCoords(pts), {padding:60});
+}
+
+function renderMemberStrip(data){
+  const strip=document.getElementById('member-strip');
+  strip.innerHTML='';
+  Object.entries(data).forEach(([uid,m])=>{
+    const isMe=uid===myId, isLeader=uid===partyLeaderUid;
+    const ageSec=m.updatedAt?Math.round((Date.now()-m.updatedAt)/1000):null;
+    let statusText = ageSec==null ? 'connecting' : (m.moving ? 'Moving' : 'Stopped');
+    if(m.moving && m.speed!=null) statusText += ' · '+m.speed+' km/h';
+    const kickBtn=(partyLeaderUid===myId && !isMe) ? `<button class="kick-btn" onclick="kickMember('${uid}')">&#10005;</button>` : '';
+    const el=document.createElement('div');
+    el.className='member';
+    el.innerHTML=`<div class="avatar-wrap">
+        <div class="avatar" style="background:${m.color||'#888'}">${(m.name||'?')[0]}</div>
+        ${isLeader?'<span class="crown">👑</span>':''}${kickBtn}
+      </div>
+      <div class="mname">${isMe?'You':(m.name||'?')}</div>
+      <div class="mstatus">${statusText}</div>`;
+    strip.appendChild(el);
+  });
+}
+function kickMember(uid){
+  if(partyLeaderUid!==myId) return;
+  if(confirm('Remove this member from the party?')) membersRef.child(uid).remove();
+}
+
+function leaveParty(kicked){
+  leavingIntentionally=true; joinedFirebase=false;
+  if(watchId!=null) navigator.geolocation.clearWatch(watchId);
+  if(!kicked && myMemberRef) myMemberRef.remove();
+  if(myMemberRef) myMemberRef.off();
+  if(membersRef) membersRef.off();
+  if(chatRef) chatRef.off();
+  if(destRef) destRef.off();
+  if(leaderRef) leaderRef.off();
+  if(liveRecalcInterval) clearInterval(liveRecalcInterval);
+  Object.values(partyMarkers).forEach(m=>m.marker.remove());
+  partyMarkers={}; partyMembers={}; partyDestination=null; partyCenteredOnce=false;
+  clearNavVisuals(); clearTrackVisuals(); removeRouteLine(partyMap,'pm-route','pm-route-layer');
+  if(partyMapDestMarkerEntry){ partyMapDestMarkerEntry.marker.remove(); partyMapDestMarkerEntry=null; }
+  trackTargetUid=null; tripActive=false;
+  setConn(false);
+  goHome();
+}
+function backToParty(){ screen('screen-party'); if(partyMap) partyMap.resize(); }
+
+/* ================= CHAT ================= */
+function openChat(){ screen('screen-chat'); unread=0; updateChatBadge(); }
+function updateChatBadge(){
+  const badge=document.getElementById('chat-badge');
+  if(unread>0){ badge.textContent=unread; badge.classList.remove('hidden'); } else badge.classList.add('hidden');
+}
+function addMessageToLog(who,text,me,isSystem){
+  const log=document.getElementById('chat-log');
+  const div=document.createElement('div');
+  div.className='msg'+(me?' me':'')+(isSystem?' system':'');
+  if(isSystem) div.innerHTML=`<div class="bubble"></div>`;
+  else div.innerHTML=`<div class="who">${who}</div><div class="bubble"></div>`;
+  div.querySelector('.bubble').textContent=text;
+  log.appendChild(div); log.scrollTop=log.scrollHeight;
+  if(!me && !isSystem && currentScreen!=='screen-chat'){ unread++; updateChatBadge(); }
+}
+function sendMessage(){
+  const input=document.getElementById('chat-input');
+  const val=input.value.trim();
+  if(!val || !chatRef) return;
+  chatRef.push({ name:myName, uid:myId, text:val, ts:Date.now() });
+  input.value='';
+}
+
+/* ================= NAVIGATION ================= */
+function openNav(){
+  screen('screen-nav');
+  if(!navMap){
+    navMap=new maplibregl.Map({ container:'nav-map', style:MAP_STYLE, center:[0,20], zoom:1.5 });
+    navMap.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
+    navMap.on('load', ()=>{ navMapReady=true; if(myLat!=null && !navCenteredOnce){ navCenteredOnce=true; navMap.jumpTo({center:[myLng,myLat], zoom:14}); } renderNavDestination(); });
+  }else{ navMap.resize(); }
+  document.getElementById('nav-search-input').value='';
+  document.getElementById('nav-results').innerHTML=''; document.getElementById('nav-results').classList.add('hidden');
+  if(navMapReady && myLat!=null && !navCenteredOnce){ navCenteredOnce=true; navMap.jumpTo({center:[myLng,myLat], zoom:14}); }
+  renderNavDestination();
+}
+
+function onNavSearchInput(){
+  clearTimeout(navSearchTimer);
+  const q=document.getElementById('nav-search-input').value.trim();
+  const resultsEl=document.getElementById('nav-results');
+  if(q.length<2){ resultsEl.innerHTML=''; resultsEl.classList.add('hidden'); return; }
+  navSearchTimer=setTimeout(()=>searchPlaces(q), 400);
+}
+async function searchPlaces(q){
+  const resultsEl=document.getElementById('nav-results');
+  resultsEl.classList.remove('hidden');
+  resultsEl.innerHTML='<div class="nav-hint">Searching…</div>';
+  let items=[];
+  try{
+    let purl='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&limit=8';
+    if(myLat!=null) purl += '&lat='+myLat+'&lon='+myLng+'&location_bias_scale=0.9';
+    const pres=await fetch(purl); const pdata=await pres.json();
+    items=(pdata.features||[]).map(f=>{
+      const p=f.properties||{};
+      const parts=[p.name,p.street,p.city,p.state,p.country].filter(Boolean);
+      return { label: parts.join(', ')||'Unnamed place', lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0] };
+    });
+  }catch(e){}
+  if(!items.length){
+    try{
+      let nurl='https://nominatim.openstreetmap.org/search?format=json&limit=8&q='+encodeURIComponent(q);
+      if(myLat!=null){ const d=0.6; nurl += `&viewbox=${myLng-d},${myLat+d},${myLng+d},${myLat-d}&bounded=0`; }
+      const nres=await fetch(nurl); const ndata=await nres.json();
+      items=(ndata||[]).map(r=>({ label:r.display_name, lat:parseFloat(r.lat), lng:parseFloat(r.lon) }));
+    }catch(e){}
+  }
+  renderNavResults(items);
+}
+function renderNavResults(items){
+  const resultsEl=document.getElementById('nav-results');
+  if(!items.length){ resultsEl.innerHTML='<div class="nav-hint">No results</div>'; return; }
+  resultsEl.innerHTML='';
+  items.forEach(it=>{
+    const row=document.createElement('div');
+    row.className='nav-result'; row.textContent=it.label;
+    row.onclick=()=>setPartyDestination(it.label.split(',')[0], it.lat, it.lng);
+    resultsEl.appendChild(row);
+  });
+}
+function setPartyDestination(name,lat,lng){
+  if(!partyCode) return;
+  db.ref('parties/'+partyCode+'/destination').set({ name, lat, lng, setBy:myName, setAt:Date.now(), shareAll:true });
+  document.getElementById('nav-search-input').value='';
+  document.getElementById('nav-results').innerHTML=''; document.getElementById('nav-results').classList.add('hidden');
+}
+function setShareMode(all){
+  if(!partyCode || !partyDestination) return;
+  db.ref('parties/'+partyCode+'/destination').update({ shareAll: all });
+}
+function clearDestination(){
+  if(partyCode) db.ref('parties/'+partyCode+'/destination').remove();
+  if(tripActive) endTrip();
+}
+function clearNavVisuals(){
+  if(navDestMarkerEntry){ navDestMarkerEntry.marker.remove(); navDestMarkerEntry=null; }
+  if(navMeMarkerEntry){ navMeMarkerEntry.marker.remove(); navMeMarkerEntry=null; }
+  removeRouteLine(navMap,'nav-route','nav-route-layer');
+  const chip=document.getElementById('dest-chip'); if(chip) chip.classList.add('hidden');
+  const st=document.getElementById('share-toggle'); if(st) st.classList.add('hidden');
+  document.getElementById('start-trip-btn').classList.add('hidden');
+  routeSteps=[]; currentStepIndex=0;
+}
+function renderNavDestination(){
+  const chip=document.getElementById('dest-chip');
+  if(!partyDestination){ clearNavVisuals(); return; }
+  chip.classList.remove('hidden');
+  document.getElementById('dc-name').textContent=partyDestination.name;
+  document.getElementById('dc-meta').textContent='Calculating route…';
+  const st=document.getElementById('share-toggle'); st.classList.remove('hidden');
+  document.getElementById('share-me-btn').classList.toggle('active', !partyDestination.shareAll);
+  document.getElementById('share-all-btn').classList.toggle('active', !!partyDestination.shareAll);
+  if(!navMapReady) return;
+  const lngLat=[partyDestination.lng, partyDestination.lat];
+  if(!navDestMarkerEntry) navDestMarkerEntry=makePinMarker(navMap, partyDestination.lat, partyDestination.lng, '#E2735C', 'Destination');
+  else navDestMarkerEntry.marker.setLngLat(lngLat);
+  updateNavRoute();
+}
+async function updateNavRoute(){
+  if(!partyDestination || myLat==null || !navMapReady) return;
+  lastNavRouteCalc=Date.now();
+  try{
+    const url=`https://router.project-osrm.org/route/v1/driving/${myLng},${myLat};${partyDestination.lng},${partyDestination.lat}?overview=full&geometries=geojson&steps=true`;
+    const res=await fetch(url); const data=await res.json();
+    if(!data.routes || !data.routes.length) throw new Error('no route');
+    const route=data.routes[0];
+    const coords=route.geometry.coordinates;
+    setRouteLine(navMap,'nav-route','nav-route-layer',coords,'var(--route-blue)'.includes('var')?'#2F8FFF':'#2F8FFF');
+    if(!navMeMarkerEntry) navMeMarkerEntry=makePinMarker(navMap,myLat,myLng,myColor,'You');
+    else navMeMarkerEntry.marker.setLngLat([myLng,myLat]);
+    if(!tripActive) navMap.fitBounds(boundsFromCoords(coords), {padding:60, duration:500});
+    document.getElementById('dc-meta').textContent = `${fmtDist(route.distance)} · ${fmtDur(route.duration)} drive`;
+    document.getElementById('start-trip-btn').classList.remove('hidden');
+    routeSteps = (route.legs && route.legs[0]) ? route.legs[0].steps : [];
+    currentStepIndex=0;
+    if(route.distance<60 && !hasAnnouncedArrival){
+      hasAnnouncedArrival=true;
+      if(chatRef) chatRef.push({ system:true, name:'System', text: myName+' has arrived at the destination.', ts:Date.now() });
+      if(tripActive) endTrip();
+    }
+  }catch(e){
+    document.getElementById('dc-meta').textContent='Route unavailable right now';
+  }
+}
+function recenterNavMap(){
+  if(!navMapReady) return;
+  if(myLat!=null) navMap.easeTo({center:[myLng,myLat], zoom:15});
+}
+
+/* ---- start trip (turn-by-turn) ---- */
+function maneuverText(step){
+  const t=step.maneuver.type, m=step.maneuver.modifier, name=step.name?(' onto '+step.name):'';
+  if(t==='arrive') return 'Arrive at destination';
+  if(t==='depart') return 'Head '+(m||'straight')+name;
+  if(t==='roundabout'||t==='rotary') return 'Enter the roundabout';
+  const map={ 'left':'Turn left','right':'Turn right','sharp left':'Turn sharp left','sharp right':'Turn sharp right','slight left':'Turn slightly left','slight right':'Turn slightly right','straight':'Continue straight','uturn':'Make a U-turn' };
+  return (map[m]||'Continue')+name;
+}
+function maneuverArrow(step){
+  const m=step.maneuver.modifier, t=step.maneuver.type;
+  if(t==='arrive') return '\u{1F3C1}';
+  if(!m) return '\u{2B06}\u{FE0F}';
+  if(m.includes('left')) return m.includes('sharp')?'\u21B0':(m.includes('slight')?'\u2196':'\u2B05\u{FE0F}');
+  if(m.includes('right')) return m.includes('sharp')?'\u21B1':(m.includes('slight')?'\u2197':'\u27A1\u{FE0F}');
+  if(m==='uturn') return '\u21A9\u{FE0F}';
+  return '\u2B06\u{FE0F}';
+}
+function startTrip(){
+  if(!routeSteps.length) return;
+  tripActive=true; hasAnnouncedArrival=false;
+  document.getElementById('nav-search-bar-wrap').classList.add('hidden');
+  document.getElementById('trip-banner').classList.remove('hidden');
+  document.getElementById('dest-chip').classList.add('hidden');
+  document.getElementById('share-toggle').classList.add('hidden');
+  navMap.easeTo({ center:[myLng,myLat], zoom:17.5, pitch:55, bearing: currentHeading||0, duration:700 });
+  updateTripBanner();
+}
+function endTrip(){
+  tripActive=false;
+  document.getElementById('nav-search-bar-wrap').classList.remove('hidden');
+  document.getElementById('trip-banner').classList.add('hidden');
+  document.getElementById('dest-chip').classList.remove('hidden');
+  document.getElementById('share-toggle').classList.remove('hidden');
+  navMap.easeTo({ pitch:0, bearing:0, zoom:14, duration:600 });
+}
+function updateTripBanner(){
+  if(!tripActive || !routeSteps.length || myLat==null) return;
+  let step=routeSteps[currentStepIndex];
+  if(!step) return;
+  let loc=step.maneuver.location;
+  let d=haversine(myLat,myLng,loc[1],loc[0]);
+  if(d<30 && currentStepIndex<routeSteps.length-1){ currentStepIndex++; step=routeSteps[currentStepIndex]; loc=step.maneuver.location; d=haversine(myLat,myLng,loc[1],loc[0]); }
+  document.getElementById('trip-arrow').textContent=maneuverArrow(step);
+  document.getElementById('trip-text').textContent=maneuverText(step);
+  document.getElementById('trip-dist').textContent='in '+fmtDist(d);
+}
+
+/* ---- destination visible on party screen for whole party ---- */
+async function refreshPartyMapDestination(){
+  if(!partyMapReady) return;
+  if(!partyDestination || !partyDestination.shareAll){
+    if(partyMapDestMarkerEntry){ partyMapDestMarkerEntry.marker.remove(); partyMapDestMarkerEntry=null; }
+    removeRouteLine(partyMap,'pm-route','pm-route-layer');
+    return;
+  }
+  if(myLat==null) return;
+  lastPartyMapRouteCalc=Date.now();
+  const lngLat=[partyDestination.lng, partyDestination.lat];
+  if(!partyMapDestMarkerEntry) partyMapDestMarkerEntry=makePinMarker(partyMap, partyDestination.lat, partyDestination.lng, '#E2735C', 'Destination');
+  else partyMapDestMarkerEntry.marker.setLngLat(lngLat);
+  try{
+    const url=`https://router.project-osrm.org/route/v1/driving/${myLng},${myLat};${partyDestination.lng},${partyDestination.lat}?overview=full&geometries=geojson`;
+    const res=await fetch(url); const data=await res.json();
+    if(data.routes && data.routes.length) setRouteLine(partyMap,'pm-route','pm-route-layer', data.routes[0].geometry.coordinates, '#2F8FFF');
+  }catch(e){}
+}
+
+/* ================= TRACK MEMBER ================= */
+function openTrack(){
+  screen('screen-track');
+  if(!trackMap){
+    trackMap=new maplibregl.Map({ container:'track-map', style:MAP_STYLE, center:[0,20], zoom:1.5 });
+    trackMap.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
+    trackMap.on('load', ()=>{ trackMapReady=true; if(trackTargetUid) updateTrackRoute(); });
+  }else{ trackMap.resize(); }
+  renderTrackMemberList();
+  if(trackMapReady && trackTargetUid) updateTrackRoute();
+}
+function renderTrackMemberList(){
+  const list=document.getElementById('track-member-list');
+  list.innerHTML='';
+  const others=Object.entries(partyMembers).filter(([uid])=>uid!==myId);
+  if(!others.length){ list.innerHTML='<div class="nav-hint">No other members yet</div>'; return; }
+  others.forEach(([uid,m])=>{
+    const el=document.createElement('div');
+    el.className='member track-pick'+(uid===trackTargetUid?' active':'');
+    const crown = uid===partyLeaderUid ? '<span class="crown">👑</span>' : '';
+    el.innerHTML=`<div class="avatar-wrap"><div class="avatar" style="background:${m.color||'#888'}">${(m.name||'?')[0]}</div>${crown}</div><div class="mname">${m.name||'?'}</div>`;
+    el.onclick=()=>selectTrackTarget(uid);
+    list.appendChild(el);
+  });
+}
+function selectTrackTarget(uid){ trackTargetUid=uid; lastTrackRouteCalc=0; renderTrackMemberList(); updateTrackRoute(); }
+function clearTrackVisuals(){
+  if(trackMemberMarkerEntry){ trackMemberMarkerEntry.marker.remove(); trackMemberMarkerEntry=null; }
+  if(trackMeMarkerEntry){ trackMeMarkerEntry.marker.remove(); trackMeMarkerEntry=null; }
+  removeRouteLine(trackMap,'track-route','track-route-layer');
+  const chip=document.getElementById('track-chip'); if(chip) chip.classList.add('hidden');
+}
+async function updateTrackRoute(){
+  if(!trackTargetUid || myLat==null || !trackMapReady) return;
+  const m=partyMembers[trackTargetUid];
+  if(!m || m.lat==null) return;
+  lastTrackRouteCalc=Date.now();
+  const chip=document.getElementById('track-chip'); chip.classList.remove('hidden');
+  document.getElementById('track-dc-name').textContent=m.name||'Member';
+  document.getElementById('track-dc-meta').textContent='Calculating route…';
+  try{
+    const url=`https://router.project-osrm.org/route/v1/driving/${myLng},${myLat};${m.lng},${m.lat}?overview=full&geometries=geojson`;
+    const res=await fetch(url); const data=await res.json();
+    if(!data.routes || !data.routes.length) throw new Error('no route');
+    const route=data.routes[0]; const coords=route.geometry.coordinates;
+    const memberColor = m.color || '#8AB4D8';
+    setRouteLine(trackMap,'track-route','track-route-layer',coords,memberColor);
+    if(!trackMemberMarkerEntry) trackMemberMarkerEntry=makePinMarker(trackMap,m.lat,m.lng,memberColor,m.name);
+    else{ trackMemberMarkerEntry.marker.setLngLat([m.lng,m.lat]); trackMemberMarkerEntry.el.querySelector('.dot').style.background=memberColor; }
+    if(!trackMeMarkerEntry) trackMeMarkerEntry=makePinMarker(trackMap,myLat,myLng,myColor,'You');
+    else trackMeMarkerEntry.marker.setLngLat([myLng,myLat]);
+    trackMap.fitBounds(boundsFromCoords(coords), {padding:60, duration:500});
+    document.getElementById('track-dc-meta').textContent = `${fmtDist(route.distance)} · ${fmtDur(route.duration)} drive`;
+  }catch(e){
+    document.getElementById('track-dc-meta').textContent='Route unavailable right now';
+  }
+}
+function recenterTrackMap(){
+  if(!trackMapReady) return;
+  const m = trackTargetUid ? partyMembers[trackTargetUid] : null;
+  const pts=[];
+  if(myLat!=null) pts.push([myLng,myLat]);
+  if(m && m.lat!=null) pts.push([m.lng,m.lat]);
+  if(!pts.length) return;
+  if(pts.length===1) trackMap.easeTo({center:pts[0], zoom:15});
+  else trackMap.fitBounds(boundsFromCoords(pts), {padding:60});
+}
+</script>
+
+</body>
+</html>
